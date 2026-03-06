@@ -1,0 +1,24 @@
+# Development overrides — volume mounts for hot reload, debug settings.
+# This file is automatically loaded by `docker compose up`.
+
+version: "3.9"
+
+services:
+  chat-recall-prod:
+    volumes:
+      - ./src:/app/src:ro
+    environment:
+      LOG_LEVEL: DEBUG
+
+  chat-recall-api:
+    volumes:
+      - ../chat-recall-api/src:/app/src:ro
+    environment:
+      LOG_LEVEL: DEBUG
+
+  chat-recall-web:
+    volumes:
+      - ../chat-recall-web/src:/app/src:ro
+    environment:
+      NODE_ENV: development
+    command: ["pnpm", "dev"]

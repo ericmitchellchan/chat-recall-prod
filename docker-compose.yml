@@ -1,0 +1,96 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chat_recall
+      POSTGRES_USER: recall
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recall -d chat_recall"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://recall:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/chat_recall
+    command: >
+      sh -c "uv run alembic upgrade head"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  chat-recall-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://recall:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/chat_recall
+      RECALL_USER_ID: ${RECALL_USER_ID:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      RECALL_BASE_URL: ${RECALL_BASE_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  chat-recall-api:
+    build:
+      context: ../chat-recall-api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://recall:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/chat_recall
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      CORS_ORIGINS: http://localhost:3000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8081:8081"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  chat-recall-web:
+    build:
+      context: ../chat-recall-web
+      dockerfile: Dockerfile
+    environment:
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
+      NEXT_PUBLIC_API_URL: http://localhost:8081
+      GITHUB_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - chat-recall-api
+
+volumes:
+  pgdata:
