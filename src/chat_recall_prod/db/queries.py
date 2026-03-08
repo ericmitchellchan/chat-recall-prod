@@ -326,6 +326,35 @@ class Database:
             values,
         )
 
+    async def increment_user_analytics(
+        self,
+        conn: AsyncConnection,
+        user_id: str,
+        *,
+        conversations: int = 0,
+        messages: int = 0,
+        uploads: int = 0,
+    ) -> None:
+        """Atomically increment analytics counters on the users table.
+
+        Args:
+            conn: Async Postgres connection.
+            user_id: User whose counters to update.
+            conversations: Number of new conversations to add.
+            messages: Number of new messages to add.
+            uploads: Number of new uploads to add (typically 1).
+        """
+        await conn.execute(
+            "UPDATE users SET "
+            "total_conversations = total_conversations + %s, "
+            "total_messages = total_messages + %s, "
+            "total_uploads = total_uploads + %s, "
+            "last_upload_at = NOW(), "
+            "updated_at = NOW() "
+            "WHERE id = %s",
+            (conversations, messages, uploads, user_id),
+        )
+
     async def delete_user_data(
         self, conn: AsyncConnection, user_id: str
     ) -> dict[str, int]:

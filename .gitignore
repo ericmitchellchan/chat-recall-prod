@@ -8,3 +8,7 @@ dist/
 .coverage
 htmlcov/
 uv.lock
+terraform.tfvars
+.terraform/
+*.tfstate
+*.tfstate.backup

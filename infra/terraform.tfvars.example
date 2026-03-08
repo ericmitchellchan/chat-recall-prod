@@ -1,0 +1,40 @@
+# Chat Recall -- Terraform Variables
+# Copy this file to terraform.tfvars and fill in actual values.
+# NEVER commit terraform.tfvars to version control.
+
+environment = "prod"
+aws_region  = "us-west-2"
+
+# RDS
+db_name     = "chat_recall"
+db_username = "chat_recall"
+db_password = "CHANGE_ME_USE_A_STRONG_PASSWORD"
+
+# ECR image URI (update after first push to ECR)
+app_image = "123456789012.dkr.ecr.us-west-2.amazonaws.com/chat-recall-api:latest"
+app_port  = 8081
+
+# Authentication
+nextauth_secret = "CHANGE_ME_GENERATE_WITH_openssl_rand_base64_32"
+
+# Stripe
+stripe_secret_key       = "sk_live_CHANGE_ME"
+stripe_webhook_secret   = "whsec_CHANGE_ME"
+stripe_monthly_price_id = "price_CHANGE_ME"
+stripe_annual_price_id  = "price_CHANGE_ME"
+stripe_product_id       = "prod_CHANGE_ME"
+
+# CORS / Frontend
+cors_origins = "https://chatrecall.ai,https://www.chatrecall.ai"
+frontend_url = "https://chatrecall.ai"
+
+# Domain
+domain_name = "api.chatrecall.ai"
+
+# ACM certificate ARN (must cover api.chatrecall.ai)
+acm_certificate_arn = "arn:aws:acm:us-west-2:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# ECS sizing
+desired_count = 1
+cpu           = 256
+memory        = 512

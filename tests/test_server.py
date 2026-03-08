@@ -196,6 +196,51 @@ async def test_push_content(mock_pool):
     conn.commit.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_push_content_updates_analytics(mock_pool):
+    pool, conn = mock_pool
+    mock_db = AsyncMock()
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch.object(server, "_get_db", return_value=mock_db), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.server._push_content", new_callable=AsyncMock) as mock_push:
+        mock_push.return_value = {
+            "conversation_id": "push-456",
+            "title": "Note",
+            "tags": [],
+        }
+
+        await server.push_content.fn(content="Some note")
+
+    mock_db.increment_user_analytics.assert_called_once_with(
+        conn, "user-1",
+        conversations=1,
+        messages=1,
+        uploads=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_push_content_skips_analytics_when_no_user(mock_pool):
+    pool, conn = mock_pool
+    mock_db = AsyncMock()
+
+    with patch.object(server, "_get_user_id", return_value=None), \
+         patch.object(server, "_get_db", return_value=mock_db), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.server._push_content", new_callable=AsyncMock) as mock_push:
+        mock_push.return_value = {
+            "conversation_id": "push-789",
+            "title": "Note",
+            "tags": [],
+        }
+
+        await server.push_content.fn(content="Some note")
+
+    mock_db.increment_user_analytics.assert_not_called()
+
+
 # ── sync_now ──────────────────────────────────────────────────────────────
 
 
@@ -245,6 +290,75 @@ async def test_sync_now_imports_data(mock_pool):
 
     assert result["conversations_imported"] == 5
     conn.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_sync_now_updates_analytics(mock_pool):
+    pool, conn = mock_pool
+    mock_db = AsyncMock()
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch.object(server, "_get_db", return_value=mock_db), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.importers.chatgpt.ChatGPTImporter") as MockImporter:
+        importer_instance = MockImporter.return_value
+        importer_instance.import_data = AsyncMock(return_value={
+            "conversations_imported": 3,
+            "messages_imported": 50,
+        })
+
+        data = json.dumps([{"id": "c1"}, {"id": "c2"}, {"id": "c3"}])
+        await server.sync_now.fn(conversations_json=data)
+
+    mock_db.increment_user_analytics.assert_called_once_with(
+        conn, "user-1",
+        conversations=3,
+        messages=50,
+        uploads=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_now_skips_analytics_when_nothing_imported(mock_pool):
+    pool, conn = mock_pool
+    mock_db = AsyncMock()
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch.object(server, "_get_db", return_value=mock_db), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.importers.chatgpt.ChatGPTImporter") as MockImporter:
+        importer_instance = MockImporter.return_value
+        importer_instance.import_data = AsyncMock(return_value={
+            "conversations_imported": 0,
+            "messages_imported": 0,
+            "conversations_skipped": 2,
+        })
+
+        data = json.dumps([{"id": "c1"}, {"id": "c2"}])
+        await server.sync_now.fn(conversations_json=data)
+
+    mock_db.increment_user_analytics.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sync_now_skips_analytics_when_no_user(mock_pool):
+    pool, conn = mock_pool
+    mock_db = AsyncMock()
+
+    with patch.object(server, "_get_user_id", return_value=None), \
+         patch.object(server, "_get_db", return_value=mock_db), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.importers.chatgpt.ChatGPTImporter") as MockImporter:
+        importer_instance = MockImporter.return_value
+        importer_instance.import_data = AsyncMock(return_value={
+            "conversations_imported": 5,
+            "messages_imported": 100,
+        })
+
+        data = json.dumps([{"id": "c1"}])
+        await server.sync_now.fn(conversations_json=data)
+
+    mock_db.increment_user_analytics.assert_not_called()
 
 
 # ── tag_conversation ──────────────────────────────────────────────────────

@@ -236,6 +236,14 @@ async def push_content(
                 content=content, title=title,
                 source_type=source_type, tags=tags, project=project,
             )
+            # Update analytics counters: push creates 1 conversation with 1 message
+            if user_id:
+                await db.increment_user_analytics(
+                    conn, user_id,
+                    conversations=1,
+                    messages=1,
+                    uploads=1,
+                )
             await conn.commit()
         return result
     except Exception as e:
@@ -278,6 +286,16 @@ async def sync_now(
         importer = ChatGPTImporter(db)
         async with get_pool().connection() as conn:
             result = await importer.import_data(conn, user_id, data)
+            # Update analytics counters on the user row
+            new_convos = result.get("conversations_imported", 0)
+            new_msgs = result.get("messages_imported", 0)
+            if user_id and (new_convos or new_msgs):
+                await db.increment_user_analytics(
+                    conn, user_id,
+                    conversations=new_convos,
+                    messages=new_msgs,
+                    uploads=1,
+                )
             await conn.commit()
         return result
     except json.JSONDecodeError as e:

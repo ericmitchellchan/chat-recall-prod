@@ -217,6 +217,36 @@ class TestDatabaseInterface:
         assert conn.execute.call_count == 7
 
     @pytest.mark.asyncio
+    async def test_increment_user_analytics(self):
+        conn = AsyncMock()
+        conn.execute = AsyncMock()
+
+        await self.db.increment_user_analytics(
+            conn, user_id="uuid-1",
+            conversations=5, messages=100, uploads=1,
+        )
+        conn.execute.assert_called_once()
+        call_args = conn.execute.call_args
+        sql = call_args[0][0]
+        params = call_args[0][1]
+        assert "total_conversations = total_conversations + %s" in sql
+        assert "total_messages = total_messages + %s" in sql
+        assert "total_uploads = total_uploads + %s" in sql
+        assert "last_upload_at = NOW()" in sql
+        assert params == (5, 100, 1, "uuid-1")
+
+    @pytest.mark.asyncio
+    async def test_increment_user_analytics_defaults(self):
+        conn = AsyncMock()
+        conn.execute = AsyncMock()
+
+        await self.db.increment_user_analytics(conn, user_id="uuid-1")
+        call_args = conn.execute.call_args
+        params = call_args[0][1]
+        # Default increments are 0
+        assert params == (0, 0, 0, "uuid-1")
+
+    @pytest.mark.asyncio
     async def test_get_stats(self):
         conn = AsyncMock()
         call_count = 0

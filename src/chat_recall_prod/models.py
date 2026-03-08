@@ -37,6 +37,18 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    # Subscription / trial lifecycle
+    subscription_status = Column(Text, nullable=False, server_default="none", default="none")
+    trial_ends_at = Column(DateTime(timezone=True))
+    cancelled_at = Column(DateTime(timezone=True))
+    retention_warned_at = Column(DateTime(timezone=True))
+
+    # Analytics counters — updated after each import/upload
+    total_conversations = Column(Integer, nullable=False, server_default="0", default=0)
+    total_messages = Column(Integer, nullable=False, server_default="0", default=0)
+    total_uploads = Column(Integer, nullable=False, server_default="0", default=0)
+    last_upload_at = Column(DateTime(timezone=True))
+
     conversations = relationship("Conversation", back_populates="user")
     uploads = relationship("Upload", back_populates="user")
     subscription = relationship("Subscription", back_populates="user", uselist=False)
