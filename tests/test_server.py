@@ -623,3 +623,75 @@ async def test_list_threads_with_filters(mock_pool):
     call_kwargs = mock_lt.call_args
     assert call_kwargs[1]["status"] == "archived"
     assert call_kwargs[1]["tags"] == ["old"]
+
+
+# ── Tag normalization at the tool boundary (SWIT-25) ──────────────────────
+# These pin the seam itself: reverting the normalize_tags calls in server.py
+# turns each of these red.
+
+
+@pytest.mark.asyncio
+async def test_search_by_tags_normalizes_query_tags(mock_pool):
+    pool, conn = mock_pool
+    expected = ConversationListResult(conversations=[], total=0, page=1, page_size=20)
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.server.SearchEngine") as MockEngine:
+        engine_instance = MockEngine.return_value
+        engine_instance.search_by_tags = AsyncMock(return_value=expected)
+
+        await server.search_by_tags.fn(tags=["CAD-1728", "  Handoff "])
+
+        args, kwargs = engine_instance.search_by_tags.call_args
+        assert args[2] == ["cad-1728", "handoff"]
+
+
+@pytest.mark.asyncio
+async def test_search_conversations_normalizes_tag_filter(mock_pool):
+    pool, conn = mock_pool
+    expected = SearchResult(query="q", hits=[], total=0, page=1, page_size=20)
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.server.SearchEngine") as MockEngine:
+        engine_instance = MockEngine.return_value
+        engine_instance.search = AsyncMock(return_value=expected)
+
+        await server.search_conversations.fn(query="q", tags=["KYDE", "Posthog"])
+
+        _, kwargs = engine_instance.search.call_args
+        assert kwargs["tags"] == ["kyde", "posthog"]
+
+
+@pytest.mark.asyncio
+async def test_push_content_normalizes_tags(mock_pool):
+    pool, conn = mock_pool
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch.object(server, "_get_db", new=AsyncMock(return_value=MagicMock())), \
+         patch("chat_recall_prod.server._push_content", new=AsyncMock(
+             return_value={"conversation_id": "c1", "title": "t", "tags": [], "replaced": True}
+         )) as mock_push:
+        await server.push_content.fn(content="body", tags=["CAD-1742", "cad-1742", " Handoff"])
+
+        _, kwargs = mock_push.call_args
+        assert kwargs["tags"] == ["cad-1742", "handoff"]
+
+
+@pytest.mark.asyncio
+async def test_tag_conversation_normalizes_input_and_existing(mock_pool):
+    pool, conn = mock_pool
+    cur = AsyncMock()
+    cur.fetchone = AsyncMock(return_value={"tags": json.dumps(["CAD-1728", "kyde"])})
+    conn.execute = AsyncMock(return_value=cur)
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool):
+        result = await server.tag_conversation.fn(
+            conversation_id="c1", tags=["Handoff"], mode="add",
+        )
+
+    # Existing CAD-1728 folds to cad-1728; new Handoff folds to handoff.
+    assert sorted(result["tags"]) == ["cad-1728", "handoff", "kyde"]

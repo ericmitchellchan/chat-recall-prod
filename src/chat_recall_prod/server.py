@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse
 
 from chat_recall_prod.db import Database, get_pool, init_pool, close_pool
 from chat_recall_prod.search import SearchEngine, _parse_tags
+from chat_recall_prod.tags import normalize_tags
 from chat_recall_prod.threads import (
     create_thread as _create_thread,
     get_thread as _get_thread,
@@ -108,7 +109,7 @@ async def search_conversations(
                 page=page, page_size=page_size, role=role,
                 canonical_only=canonical_only, date_from=date_from,
                 date_to=date_to, source_type=source_type,
-                project=project, tags=tags,
+                project=project, tags=normalize_tags(tags),
             )
         return result.model_dump()
     except Exception as e:
@@ -247,7 +248,8 @@ async def push_content(
             result = await _push_content(
                 db, conn, user_id,
                 content=content, title=title,
-                source_type=source_type, tags=tags, project=project,
+                source_type=source_type, tags=normalize_tags(tags),
+                project=project,
                 external_id=external_id,
             )
             # Analytics count what was ADDED. A replace overwrites one
@@ -353,11 +355,12 @@ async def tag_conversation(
             if row is None:
                 return _error(f"Conversation not found: {conversation_id}")
 
+            tags = normalize_tags(tags) or []
             if mode == "set":
-                final_tags = list(set(tags))
+                final_tags = tags
             else:
                 existing = _parse_tags(row["tags"])
-                final_tags = list(set(existing + tags))
+                final_tags = normalize_tags(existing + tags) or []
 
             await conn.execute(
                 "UPDATE conversations SET tags = %s::jsonb WHERE id = %s AND user_id = %s",
@@ -392,7 +395,7 @@ async def search_by_tags(
         engine = SearchEngine()
         async with get_pool().connection() as conn:
             result = await engine.search_by_tags(
-                conn, user_id, tags,
+                conn, user_id, normalize_tags(tags) or [],
                 page=page, page_size=page_size,
             )
         return result.model_dump()
@@ -428,7 +431,7 @@ async def create_thread(
         async with get_pool().connection() as conn:
             result = await _create_thread(
                 conn, user_id, slug, title,
-                description=description, tags=tags,
+                description=description, tags=normalize_tags(tags),
             )
             await conn.commit()
         return result
@@ -509,7 +512,7 @@ async def list_threads(
     try:
         user_id = await _get_user_id(ctx)
         async with get_pool().connection() as conn:
-            result = await _list_threads(conn, user_id, status=status, tags=tags)
+            result = await _list_threads(conn, user_id, status=status, tags=normalize_tags(tags))
         return result
     except Exception as e:
         logger.error("list_threads failed: %s", e, exc_info=True)
