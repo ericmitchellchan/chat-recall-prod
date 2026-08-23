@@ -68,7 +68,7 @@ class TestSearchEngine:
     async def test_search_builds_correct_query(self):
         conn = AsyncMock()
         mock_count_cur = AsyncMock()
-        mock_count_cur.fetchone = AsyncMock(return_value=(5,))
+        mock_count_cur.fetchone = AsyncMock(return_value={"n": 5})
         mock_search_cur = AsyncMock()
         mock_search_cur.fetchall = AsyncMock(return_value=[
             {
@@ -101,7 +101,7 @@ class TestSearchEngine:
     async def test_search_with_filters(self):
         conn = AsyncMock()
         mock_cur = AsyncMock()
-        mock_cur.fetchone = AsyncMock(return_value=(0,))
+        mock_cur.fetchone = AsyncMock(return_value={"n": 0})
         mock_cur.fetchall = AsyncMock(return_value=[])
 
         async def mock_execute(sql, params=None):
@@ -121,7 +121,7 @@ class TestSearchEngine:
     async def test_list_conversations(self):
         conn = AsyncMock()
         mock_count = AsyncMock()
-        mock_count.fetchone = AsyncMock(return_value=(2,))
+        mock_count.fetchone = AsyncMock(return_value={"n": 2})
         mock_rows = AsyncMock()
         mock_rows.fetchall = AsyncMock(return_value=[
             {
@@ -188,7 +188,7 @@ class TestSearchEngine:
     async def test_search_by_tags(self):
         conn = AsyncMock()
         mock_count = AsyncMock()
-        mock_count.fetchone = AsyncMock(return_value=(1,))
+        mock_count.fetchone = AsyncMock(return_value={"n": 1})
         mock_rows = AsyncMock()
         mock_rows.fetchall = AsyncMock(return_value=[
             {
@@ -225,7 +225,7 @@ class TestSearchEngine:
             if call_count == 1:
                 mock_cur.fetchone = AsyncMock(return_value={"count": 10, "earliest": 1704067200.0, "latest": 1704153600.0})
             elif call_count == 2:
-                mock_cur.fetchone = AsyncMock(return_value=(500,))
+                mock_cur.fetchone = AsyncMock(return_value={"n": 500})
             elif call_count == 3:
                 mock_cur.fetchall = AsyncMock(return_value=[{"role": "user", "cnt": 250}, {"role": "assistant", "cnt": 250}])
             elif call_count == 4:
