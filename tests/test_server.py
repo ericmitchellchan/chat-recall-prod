@@ -241,6 +241,53 @@ async def test_push_content_skips_analytics_when_no_user(mock_pool):
     mock_db.increment_user_analytics.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_push_content_skips_analytics_on_replace(mock_pool):
+    """A replace overwrites one entry in place — nothing was added.
+
+    Counting it would inflate the user's totals a little more on every
+    refresh, and CC-575 refreshes long-lived threads repeatedly.
+    """
+    pool, conn = mock_pool
+    mock_db = AsyncMock()
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch.object(server, "_get_db", return_value=mock_db), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.server._push_content", new_callable=AsyncMock) as mock_push:
+        mock_push.return_value = {
+            "conversation_id": "push-abc",
+            "title": "Note",
+            "tags": [],
+            "replaced": True,
+        }
+
+        await server.push_content.fn(content="Some note", external_id="k")
+
+    mock_db.increment_user_analytics.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_push_content_forwards_external_id(mock_pool):
+    pool, conn = mock_pool
+    mock_db = AsyncMock()
+
+    with patch.object(server, "_get_user_id", return_value="user-1"), \
+         patch.object(server, "_get_db", return_value=mock_db), \
+         patch("chat_recall_prod.server.get_pool", return_value=pool), \
+         patch("chat_recall_prod.server._push_content", new_callable=AsyncMock) as mock_push:
+        mock_push.return_value = {
+            "conversation_id": "push-abc",
+            "title": "Note",
+            "tags": [],
+            "replaced": False,
+        }
+
+        await server.push_content.fn(content="Some note", external_id="C1:170.1")
+
+    assert mock_push.call_args.kwargs["external_id"] == "C1:170.1"
+
+
 # ── sync_now ──────────────────────────────────────────────────────────────
 
 

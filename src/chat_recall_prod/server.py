@@ -213,9 +213,19 @@ async def push_content(
     source_type: str = "push",
     tags: list[str] | None = None,
     project: str | None = None,
+    external_id: str | None = None,
     ctx: Context | None = None,
 ) -> dict:
-    """Push text content into the recall database as a new searchable conversation.
+    """Push text content into the recall database as a searchable conversation.
+
+    Pass an external_id to make the push repeatable: the same key always maps
+    to the same entry, so pushing it again REPLACES that entry instead of
+    creating a duplicate. Use it for anything that gets re-captured as it
+    changes — a Slack thread that is still getting replies, a doc that gets
+    revised. The original create_time is kept and update_time moves, so the
+    entry carries both when it was first seen and when it last changed.
+
+    Without an external_id the push always creates a new conversation.
 
     Args:
         content: The text content to store.
@@ -223,9 +233,12 @@ async def push_content(
         source_type: Source type label (default "push").
         tags: Optional list of tags for categorization.
         project: Optional project label.
+        external_id: Optional stable key. Re-pushing the same key replaces the
+            entry it created rather than adding another one.
 
     Returns:
-        Dict with conversation_id, title, and tags.
+        Dict with conversation_id, title, tags, and `replaced` (True when an
+        existing entry was overwritten).
     """
     try:
         user_id = await _get_user_id(ctx)
@@ -235,9 +248,12 @@ async def push_content(
                 db, conn, user_id,
                 content=content, title=title,
                 source_type=source_type, tags=tags, project=project,
+                external_id=external_id,
             )
-            # Update analytics counters: push creates 1 conversation with 1 message
-            if user_id:
+            # Analytics count what was ADDED. A replace overwrites one
+            # conversation in place, so counting it again would inflate the
+            # user's totals a little more on every refresh.
+            if user_id and not result.get("replaced"):
                 await db.increment_user_analytics(
                     conn, user_id,
                     conversations=1,
