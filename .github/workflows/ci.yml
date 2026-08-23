@@ -6,9 +6,42 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
+    # The integration tests need a real Postgres — the mock suite can prove the
+    # branching is right but not that the SQL is. Without this, tests marked
+    # `postgres` skip silently and CI goes green on untested queries (SWIT-23).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: chat_recall_test
+          POSTGRES_USER: recall
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U recall -d chat_recall_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv python install ${{ matrix.python-version }}
       - run: uv sync --dev
-      - run: uv run pytest tests/ -x -q --tb=short
+      # alembic resolves the driver from the URL scheme, and bare
+      # `postgresql://` sends SQLAlchemy looking for psycopg2, which this
+      # project does not install — it is psycopg 3.
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://recall:testpass@localhost:5432/chat_recall_test
+      - name: Run tests
+        run: uv run pytest tests/ -x -q --tb=short
+        env:
+          TEST_DATABASE_URL: postgresql://recall:testpass@localhost:5432/chat_recall_test
+      # A guard against the integration tests quietly skipping forever: if the
+      # marker or the fixture breaks, this step fails instead of going green.
+      - name: Assert the Postgres tests actually ran
+        run: uv run pytest tests/ -q -m postgres --collect-only | grep -q "test_upsert_postgres"
+        env:
+          TEST_DATABASE_URL: postgresql://recall:testpass@localhost:5432/chat_recall_test

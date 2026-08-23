@@ -33,13 +33,20 @@ class Database:
         record_count: int = 0,
         metadata: dict | None = None,
     ) -> int:
+        # Set the row factory rather than inheriting whatever the caller left
+        # on the connection: _get_or_create_push_source sets dict_row right
+        # before calling this, and the old row[0] raised KeyError on a dict.
+        # Only the very first push for a source_type reaches here — every later
+        # one returns from the SELECT — so it stayed hidden until a fresh
+        # database ran it (SWIT-23).
+        conn.row_factory = dict_row
         cur = await conn.execute(
             "INSERT INTO sources (source_type, file_path, record_count, metadata) "
             "VALUES (%s, %s, %s, %s) RETURNING id",
             (source_type, file_path, record_count, json.dumps(metadata) if metadata else None),
         )
         row = await cur.fetchone()
-        return row[0]
+        return row["id"]
 
     # ── Conversation operations ────────────────────────────────────────
 
@@ -205,7 +212,8 @@ class Database:
         cur = await conn.execute(
             "SELECT m.* FROM messages m "
             "JOIN conversations c ON m.conversation_id = c.id "
-            "WHERE m.conversation_id = %s AND c.user_id = %s "
+            "WHERE m.conversation_id = %s "
+            "AND c.user_id IS NOT DISTINCT FROM %s "
             "ORDER BY m.create_time ASC NULLS FIRST",
             (conversation_id, user_id),
         )
