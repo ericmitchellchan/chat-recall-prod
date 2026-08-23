@@ -97,7 +97,8 @@ class Database:
         values.extend([conv_id, user_id])
         set_clause = ", ".join(set_parts)
         await conn.execute(
-            f"UPDATE conversations SET {set_clause} WHERE id = %s AND user_id = %s",
+            f"UPDATE conversations SET {set_clause} "
+            "WHERE id = %s AND user_id IS NOT DISTINCT FROM %s",
             values,
         )
 
@@ -109,7 +110,8 @@ class Database:
     ) -> dict[str, Any] | None:
         conn.row_factory = dict_row
         cur = await conn.execute(
-            "SELECT * FROM conversations WHERE id = %s AND user_id = %s",
+            "SELECT * FROM conversations "
+            "WHERE id = %s AND user_id IS NOT DISTINCT FROM %s",
             (conv_id, user_id),
         )
         return await cur.fetchone()
@@ -187,7 +189,8 @@ class Database:
     ) -> int:
         cur = await conn.execute(
             "DELETE FROM messages WHERE conversation_id = %s "
-            "AND conversation_id IN (SELECT id FROM conversations WHERE user_id = %s)",
+            "AND conversation_id IN ("
+            "SELECT id FROM conversations WHERE user_id IS NOT DISTINCT FROM %s)",
             (conversation_id, user_id),
         )
         return cur.rowcount

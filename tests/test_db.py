@@ -99,7 +99,11 @@ class TestDatabaseInterface:
         conn.execute.assert_called_once()
         call_args = conn.execute.call_args
         assert "UPDATE conversations" in call_args[0][0]
-        assert "user_id = %s" in call_args[0][0]
+        # The predicate is IS NOT DISTINCT FROM rather than `=` so a stdio-mode
+        # NULL user_id matches its own rows instead of matching nothing. For a
+        # real user id the two are identical, so isolation is unchanged — what
+        # matters here is that the query is still scoped by user at all.
+        assert "user_id IS NOT DISTINCT FROM %s" in call_args[0][0]
 
     @pytest.mark.asyncio
     async def test_update_conversation_noop(self):
