@@ -267,7 +267,7 @@ class TestDatabaseInterface:
                 mock_cur.fetchone = AsyncMock(return_value={"count": 10, "earliest": 1704067200.0, "latest": 1704153600.0})
             elif call_count == 2:
                 # Message count
-                mock_cur.fetchone = AsyncMock(return_value=(100,))
+                mock_cur.fetchone = AsyncMock(return_value={"n": 100})
             elif call_count == 3:
                 # Roles
                 mock_cur.fetchall = AsyncMock(return_value=[{"role": "user", "cnt": 50}, {"role": "assistant", "cnt": 50}])

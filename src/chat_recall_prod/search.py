@@ -113,16 +113,22 @@ class SearchEngine:
 
         # Count
         count_sql = (
-            f"SELECT COUNT(*) FROM messages m "
+            f"SELECT COUNT(*) AS n FROM messages m "
             f"JOIN conversations c ON m.conversation_id = c.id "
             f"WHERE {where}"
         )
         cur = await conn.execute(count_sql, params)
-        total = (await cur.fetchone())[0]
+        total = (await cur.fetchone())["n"]
 
         # Search with ranking and snippets
         offset = (page - 1) * page_size
-        search_params = params + [sanitized, sanitized, page_size, offset]
+        # Positional params bind in the order their placeholders appear, and
+        # the two query-text placeholders live in the SELECT clause — BEFORE
+        # every WHERE param. Appending them after put a noise-filter string in
+        # the user_id::uuid slot, so this query had never once executed: it
+        # raised InvalidTextRepresentation on every call (SWIT-24, caught the
+        # moment a real database ran it).
+        search_params = [sanitized, sanitized] + params + [page_size, offset]
         search_sql = (
             f"SELECT m.conversation_id, m.role, m.create_time, "
             f"c.title AS conversation_title, "
@@ -176,8 +182,10 @@ class SearchEngine:
 
         where = " AND ".join(conditions)
 
-        cur = await conn.execute(f"SELECT COUNT(*) FROM conversations WHERE {where}", params)
-        total = (await cur.fetchone())[0]
+        cur = await conn.execute(
+            f"SELECT COUNT(*) AS n FROM conversations WHERE {where}", params
+        )
+        total = (await cur.fetchone())["n"]
 
         allowed_sorts = {"create_time", "update_time", "title", "message_count"}
         if sort_by not in allowed_sorts:
@@ -287,8 +295,10 @@ class SearchEngine:
 
         where = " AND ".join(conditions)
 
-        cur = await conn.execute(f"SELECT COUNT(*) FROM conversations WHERE {where}", params)
-        total = (await cur.fetchone())[0]
+        cur = await conn.execute(
+            f"SELECT COUNT(*) AS n FROM conversations WHERE {where}", params
+        )
+        total = (await cur.fetchone())["n"]
 
         offset = (page - 1) * page_size
         cur = await conn.execute(
@@ -335,12 +345,12 @@ class SearchEngine:
         row = await cur.fetchone()
 
         cur = await conn.execute(
-            "SELECT COUNT(*) FROM messages m "
+            "SELECT COUNT(*) AS n FROM messages m "
             "JOIN conversations c ON m.conversation_id = c.id "
             "WHERE c.user_id = %s",
             (user_id,),
         )
-        msg_count = (await cur.fetchone())[0]
+        msg_count = (await cur.fetchone())["n"]
 
         roles: dict[str, int] = {}
         cur = await conn.execute(

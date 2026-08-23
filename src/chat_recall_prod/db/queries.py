@@ -147,8 +147,10 @@ class Database:
         where_clause = " AND ".join(where)
 
         # Count
-        cur = await conn.execute(f"SELECT COUNT(*) FROM conversations WHERE {where_clause}", params)
-        total = (await cur.fetchone())[0]
+        cur = await conn.execute(
+            f"SELECT COUNT(*) AS n FROM conversations WHERE {where_clause}", params
+        )
+        total = (await cur.fetchone())["n"]
 
         # Fetch page
         offset = (page - 1) * page_size
@@ -236,12 +238,12 @@ class Database:
         row = await cur.fetchone()
 
         cur = await conn.execute(
-            "SELECT COUNT(*) FROM messages m "
+            "SELECT COUNT(*) AS n FROM messages m "
             "JOIN conversations c ON m.conversation_id = c.id "
             "WHERE c.user_id = %s",
             (user_id,),
         )
-        msg_count = (await cur.fetchone())[0]
+        msg_count = (await cur.fetchone())["n"]
 
         roles: dict[str, int] = {}
         cur = await conn.execute(
