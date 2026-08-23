@@ -59,7 +59,10 @@ class TestDatabaseInterface:
     async def test_insert_source(self):
         conn = AsyncMock()
         mock_cursor = AsyncMock()
-        mock_cursor.fetchone = AsyncMock(return_value=(42,))
+        # A dict, because insert_source sets dict_row on the connection. The
+        # old tuple fixture encoded the bug it was hiding: the real cursor
+        # returned a dict and row[0] raised KeyError (SWIT-23).
+        mock_cursor.fetchone = AsyncMock(return_value={"id": 42})
         conn.execute = AsyncMock(return_value=mock_cursor)
 
         result = await self.db.insert_source(
